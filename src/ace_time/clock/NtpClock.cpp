@@ -50,7 +50,7 @@ void NtpClock::setup(
     SERIAL_PORT_MONITOR.print(F("NtpClock::setup(): connected to "));
     SERIAL_PORT_MONITOR.println(WiFi.localIP());
   #else
-  if(Network.getDefaultInterface()){
+  if(Network.getDefaultInterface() && Network.getDefaultInterface()->connected()){
     SERIAL_PORT_MONITOR.print(F("NtpClock::setup(): connected to "));
     SERIAL_PORT_MONITOR.println(Network.getDefaultInterface()->localIP());
   #endif
