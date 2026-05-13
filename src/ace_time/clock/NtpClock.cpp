@@ -26,12 +26,15 @@ void NtpClock::setup(
   if (ssid) {
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid, password);
+    #if defined(ESP32)
+      Network.setDefaultInterface(WiFi.STA);
+    #endif
     uint16_t startMillis = millis();
     while (WiFi.status() != WL_CONNECTED) {
       uint16_t elapsedMillis = millis() - startMillis;
       if (elapsedMillis >= connectTimeoutMillis) {
       #if ACE_TIME_NTP_CLOCK_DEBUG >= 1
-        SERIAL_PORT_MONITOR.println(F("NtpClock::setup(): failed"));
+        SERIAL_PORT_MONITOR.println(F("NtpClock::setup(): Connecting to WiFi failed"));
       #endif
         mIsSetUp = false;
         return;
@@ -41,22 +44,43 @@ void NtpClock::setup(
     }
   }
 
-  mUdp.begin(mLocalPort);
-
-#if ACE_TIME_NTP_CLOCK_DEBUG >= 1
-  SERIAL_PORT_MONITOR.print(F("NtpClock::setup(): connected to"));
-  SERIAL_PORT_MONITOR.println(WiFi.localIP());
+  #if ACE_TIME_NTP_CLOCK_DEBUG >= 1
   #if defined(ESP8266)
-    SERIAL_PORT_MONITOR.print(F("Local port: "));
+  if(WiFi.status() == WL_CONNECTED){
+    SERIAL_PORT_MONITOR.print(F("NtpClock::setup(): connected to "));
+    SERIAL_PORT_MONITOR.println(WiFi.localIP());
+  #else
+  if(Network.getDefaultInterface()){
+    SERIAL_PORT_MONITOR.print(F("NtpClock::setup(): connected to "));
+    SERIAL_PORT_MONITOR.println(Network.getDefaultInterface()->localIP());
+  #endif
+  }
+  else{
+    SERIAL_PORT_MONITOR.println(F("NtpClock::setup(): network interface not ready"));
+  }
+  #endif
+
+  if(!mUdp.begin(mLocalPort)){
+    #if ACE_TIME_NTP_CLOCK_DEBUG >= 1
+      SERIAL_PORT_MONITOR.println(F("NtpClock::setup(): UDP bind failed"));
+    #endif
+    return;
+  }
+
+  #if ACE_TIME_NTP_CLOCK_DEBUG >= 1 && defined(ESP8266)
+    SERIAL_PORT_MONITOR.print(F("NtpClock::setup(): Local port: "));
     SERIAL_PORT_MONITOR.println(mUdp.localPort());
   #endif
-#endif
 
   mIsSetUp = true;
 }
 
 acetime_t NtpClock::getNow() const {
-  if (!mIsSetUp || WiFi.status() != WL_CONNECTED) return kInvalidSeconds;
+  #if defined(ESP8266) || defined(EPOXY_CORE_ESP8266)
+    if (!mIsSetUp || WiFi.status() != WL_CONNECTED) return kInvalidSeconds;
+  #else
+    if (!mIsSetUp || !(Network.getDefaultInterface() != NULL && Network.getDefaultInterface()->connected())) return kInvalidSeconds;
+  #endif
 
   sendRequest();
 
@@ -71,7 +95,12 @@ acetime_t NtpClock::getNow() const {
 
 void NtpClock::sendRequest() const {
   if (!mIsSetUp) return;
-  if (WiFi.status() != WL_CONNECTED) {
+  #if defined(ESP8266) || defined(EPOXY_CORE_ESP8266)
+    if (WiFi.status() != WL_CONNECTED) {
+  #else
+    if (!(Network.getDefaultInterface() != NULL && Network.getDefaultInterface()->connected())) {
+  #endif
+
   #if ACE_TIME_NTP_CLOCK_DEBUG >= 1
     SERIAL_PORT_MONITOR.println(
         F("NtpClock::sendRequest(): not connected"));
@@ -93,7 +122,11 @@ void NtpClock::sendRequest() const {
   // TODO: check return value of hostByName() for errors
   // When there is an error, the ntpServerIP seems to become "0.0.0.0".
   IPAddress ntpServerIP;
-  WiFi.hostByName(mServer, ntpServerIP);
+  #if defined(ESP8266) || defined(EPOXY_CORE_ESP8266)
+    WiFi.hostByName(mServer, ntpServerIP);
+  #else
+    Network.hostByName(mServer, ntpServerIP);
+  #endif
   sendNtpPacket(ntpServerIP);
 }
 
@@ -103,7 +136,11 @@ bool NtpClock::isResponseReady() const {
 #endif
 
   if (!mIsSetUp) return false;
-  if (WiFi.status() != WL_CONNECTED) {
+  #if defined(ESP8266) || defined(EPOXY_CORE_ESP8266)
+    if (WiFi.status() != WL_CONNECTED) {
+  #else
+    if (!(Network.getDefaultInterface() != NULL && Network.getDefaultInterface()->connected())) {
+  #endif
   #if ACE_TIME_NTP_CLOCK_DEBUG >= 3
     if (++rateLimiter == 0) {
       SERIAL_PORT_MONITOR.print("F[256]");
@@ -122,7 +159,11 @@ bool NtpClock::isResponseReady() const {
 
 acetime_t NtpClock::readResponse() const {
   if (!mIsSetUp) return kInvalidSeconds;
-  if (WiFi.status() != WL_CONNECTED) {
+  #if defined(ESP8266) || defined(EPOXY_CORE_ESP8266)
+    if (WiFi.status() != WL_CONNECTED) {
+  #else
+    if (!(Network.getDefaultInterface() != NULL && Network.getDefaultInterface()->connected())) {
+  #endif
   #if ACE_TIME_NTP_CLOCK_DEBUG >= 2
     SERIAL_PORT_MONITOR.println("NtpClock::readResponse(): not connected");
   #endif

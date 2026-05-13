@@ -11,10 +11,11 @@
 #include <stdint.h>
 #if defined(ESP8266) || defined(EPOXY_CORE_ESP8266)
   #include <ESP8266WiFi.h>
+  #include <WiFiUdp.h>
 #else
+  #include <NetworkManager.h>
   #include <WiFi.h>
 #endif
-#include <WiFiUdp.h>
 #include "Clock.h"
 
 #ifndef ACE_TIME_NTP_CLOCK_DEBUG
@@ -25,9 +26,9 @@ namespace ace_time {
 namespace clock {
 
 /**
- * A Clock that retrieves the time from an NTP server. This class has the
- * deficiency that the DNS name resolver WiFi.hostByName() is a blocking call.
- * So every now and then, it can take 5-6 seconds for the call to return,
+ * A Clock that retrieves the time from an NTP server. This class has the deficiency
+ * that the DNS name resolver <NetworkInterface>.hostByName() is a blocking call.
+ * So every now and then, it can take 5-6 seconds for the call to return, 
  * blocking everything (e.g. display refresh, button clicks) until it times out.
  *
  * NTP seconds is an unsigned 32-bit integer offset from the NTP epoch of
@@ -98,8 +99,8 @@ class NtpClock: public Clock {
 
     /**
      * Set up the WiFi connection using the given ssid and password, and
-     * prepare the UDP connection. If the WiFi connection was set up elsewhere,
-     * you can call the method with no arguments to bypass the WiFi setup.
+     * prepare the UDP connection. If the WiFi/Ethernet connection was set up
+     * elsewhere, you can call the method with no arguments to bypass the WiFi setup.
      *
      * @param ssid wireless SSID (default nullptr)
      * @param password password of the SSID (default nullptr)
@@ -160,7 +161,11 @@ class NtpClock: public Clock {
     uint16_t const mLocalPort;
     uint16_t const mRequestTimeout;
 
+  #if defined(ESP8266) || defined(EPOXY_CORE_ESP8266)
     mutable WiFiUDP mUdp;
+  #else
+    mutable NetworkUDP mUdp;
+  #endif
     // buffer to hold incoming & outgoing packets
     mutable uint8_t mPacketBuffer[kNtpPacketSize];
     bool mIsSetUp = false;
